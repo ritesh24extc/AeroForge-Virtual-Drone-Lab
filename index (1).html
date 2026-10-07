@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AeroForge — Virtual Drone Lab &amp; Circuit Simulator</title>
+<meta name="description" content="AeroForge: Tinkercad-grade DIY drone electronic circuit simulator, visual pinout wiring, real-time electrical rule validation, and auto-generated Arduino C++ firmware.">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- ══════════════════ 1. HEADER TOOLBAR ══════════════════ -->
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-badge" aria-hidden="true">🛸</div>
+    <div class="brand-text">
+      <span class="brand-name">AeroForge</span>
+      <span class="brand-sub">Virtual Drone Lab</span>
+    </div>
+  </div>
+
+  <div class="header-actions">
+    <button id="wireModeBtn" class="btn btn-accent" aria-pressed="false"
+            title="Wire Mode: Click a golden pin on one component, then click another pin to connect">
+      🔌 Wire Mode: OFF
+    </button>
+    <button id="validateBtn" class="btn" title="Validate complete circuit against DIY drone electrical and bus rules">
+      ✅ Validate
+    </button>
+    <button id="generateBtn" class="btn btn-accent" title="Generate Arduino C++ firmware from the canvas wiring">
+      ⚡ Generate Code
+    </button>
+    <button id="clearBtn" class="btn btn-ghost" title="Clear all components and wires from the canvas">
+      🧹 Clear
+    </button>
+
+    <span class="divider" aria-hidden="true"></span>
+
+    <button id="exportBtn" class="btn" title="Save this circuit as a downloadable .json project file">
+      💾 Save
+    </button>
+    <button id="importBtn" class="btn" title="Load an AeroForge .json project file">
+      📂 Load
+    </button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+
+    <span class="divider" aria-hidden="true"></span>
+
+    <button id="toggleLeftBtn" class="btn btn-icon" aria-expanded="true"
+            aria-label="Toggle component library" title="Toggle Component Library">📦</button>
+    <button id="toggleRightBtn" class="btn btn-icon" aria-expanded="true"
+            aria-label="Toggle properties panel" title="Toggle Inspector">⚙️</button>
+    <button id="resetViewBtn" class="btn btn-icon"
+            aria-label="Reset pan and zoom" title="Reset View (100%)">🎯</button>
+    <button id="themeToggleBtn" class="btn btn-icon" aria-pressed="false"
+            aria-label="Toggle light and dark theme" title="Toggle Light / Dark Theme">☀️</button>
+  </div>
+</header>
+
+<!-- ══════════════════ 2. THREE-PANEL LAYOUT ══════════════════ -->
+<div class="app-layout">
+
+  <!-- LEFT PANEL: COMPONENT LIBRARY -->
+  <aside class="sidebar" id="leftSidebar" aria-label="Component Library">
+    <div class="sidebar-header">
+      <h2>📦 Hardware Library</h2>
+      <span class="cat-badge" id="libraryCount">22 items</span>
+    </div>
+
+    <div class="sidebar-body">
+      <div class="filter-row">
+        <div class="search-wrap">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input type="text" id="searchBox" placeholder="Search FC, IMU, ESC, LiPo…" autocomplete="off"
+                 spellcheck="false" aria-label="Search components">
+        </div>
+        <select id="categoryFilter" aria-label="Filter by category">
+          <option value="ALL">All Categories (DIY Drone Hardware)</option>
+          <option value="Microcontrollers">Flight Controllers &amp; MCUs</option>
+          <option value="Sensors &amp; Navigation">Sensors &amp; Navigation</option>
+          <option value="Power &amp; Actuators">Power, ESCs &amp; Motors</option>
+          <option value="Radio &amp; Telemetry">Radio Links &amp; Telemetry</option>
+          <option value="Displays &amp; Signaling">Displays, Buzzers &amp; LEDs</option>
+        </select>
+      </div>
+
+      <div id="componentList" class="component-list" role="list"></div>
+    </div>
+  </aside>
+
+  <!-- CENTER WORKSPACE: FABRIC.JS CANVAS -->
+  <section class="workspace" aria-label="Canvas Workspace">
+    <div class="canvas-wrap" id="canvasWrap">
+      <!-- Floating Canvas Overlay Controls (Tinkercad style) -->
+      <div class="canvas-overlay-controls" role="toolbar" aria-label="Canvas zoom and view controls">
+        <button id="zoomInBtn" class="btn btn-icon" title="Zoom In (+)">➕</button>
+        <button id="zoomOutBtn" class="btn btn-icon" title="Zoom Out (-)">➖</button>
+        <button id="zoomFitBtn" class="btn btn-icon" title="Fit to View">🔲</button>
+      </div>
+
+      <canvas id="droneCanvas"></canvas>
+
+      <!-- Pin Hover Tooltip -->
+      <div id="pinTooltip" class="pin-tooltip" hidden>
+        <span class="pin-tooltip-header" id="pinTooltipTitle">PIN</span>
+        <span class="pin-tooltip-type" id="pinTooltipType">Signal</span>
+      </div>
+    </div>
+
+    <div class="canvas-hint">
+      <span>💡 <strong>Drag</strong> to move</span>·
+      <span><strong>Scroll</strong> to zoom</span>·
+      <span><kbd>Alt</kbd>+drag to pan</span>·
+      <span><kbd>D</kbd> or right-click to duplicate</span>·
+      <span><kbd>R</kbd> to rotate 90°</span>·
+      <span><kbd>Del</kbd> to delete</span>
+    </div>
+  </section>
+
+  <!-- RIGHT PANEL: DYNAMIC PROPERTIES & PIN INSPECTOR -->
+  <aside class="sidebar" id="rightSidebar" aria-label="Properties Inspector">
+    <div class="sidebar-header">
+      <h2>⚙️ Inspector</h2>
+      <span class="cat-badge" id="selectionTypeBadge">None</span>
+    </div>
+
+    <div class="sidebar-body">
+      <!-- Empty State -->
+      <div id="emptyPanel" class="empty-panel">
+        <div class="empty-panel-icon" aria-hidden="true">📐</div>
+        <strong>No Selection</strong>
+        <p>Click any PCB component or connecting wire on the canvas to inspect pinouts, electrical signals, and configuration.</p>
+      </div>
+
+      <!-- Component Inspector -->
+      <div id="propsPanel" hidden>
+        <h3 class="panel-title">
+          <span id="selectedCompName">—</span>
+        </h3>
+
+        <div class="panel-actions">
+          <button id="duplicateBtn" class="btn btn-small" title="Duplicate component (D or Ctrl+D)">🧬 Duplicate</button>
+          <button id="rotateBtn" class="btn btn-small" title="Rotate component 90 degrees (R)">🔄 Rotate 90°</button>
+          <button id="deleteBtn" class="btn btn-danger btn-small" style="grid-column: span 2;" title="Delete (Del or Backspace)">🗑️ Delete Selection</button>
+        </div>
+
+        <div class="form-group">
+          <label for="compCategory">Category</label>
+          <select id="compCategory" disabled></select>
+        </div>
+
+        <div class="form-group">
+          <label for="compVariant">Model / Variant</label>
+          <select id="compVariant"></select>
+        </div>
+
+        <div class="info-card">
+          <strong>Hardware Spec</strong>
+          <p id="compDesc">—</p>
+        </div>
+
+        <div class="pin-inspector-card">
+          <div class="pin-inspector-header">
+            <span>📍 Pinout &amp; Signals</span>
+            <span id="pinCountBadge" class="cat-badge">0 pins</span>
+          </div>
+          <div class="pin-table-wrap">
+            <table class="pin-table">
+              <thead>
+                <tr>
+                  <th>Pin</th>
+                  <th>Signal</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody id="pinTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wire Inspector -->
+      <div id="wirePropsPanel" hidden>
+        <h3 class="panel-title">
+          <span>🔗 Wire Connection</span>
+        </h3>
+        <button id="deleteWireBtn" class="btn btn-danger btn-block" title="Delete this wire connection">🗑️ Delete Wire</button>
+
+        <div class="info-card" id="wireInfoCard">
+          <strong>Signal Coupling</strong>
+          <p id="wireDescText">—</p>
+        </div>
+
+        <div class="pin-inspector-card">
+          <div class="pin-inspector-header">
+            <span>Electrical Check</span>
+            <span id="wireStatusBadge" class="cat-badge">CHECK</span>
+          </div>
+          <div class="pin-table-wrap">
+            <table class="pin-table">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="wireTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+</div>
+
+<!-- ══════════════════ 3. BOTTOM PANEL: TABS & FIRMWARE ══════════════════ -->
+<section class="bottom-panel" aria-label="Console and Code Outputs">
+  <div class="tabs" role="tablist" aria-label="Output views">
+    <button class="tab active" data-target="consoleOutput" role="tab" aria-selected="true" id="tabConsole" aria-controls="consoleOutput">
+      🖥️ Console <span id="logCountBadge" class="tab-badge">0</span>
+    </button>
+    <button class="tab" data-target="codeOutput" role="tab" aria-selected="false" id="tabCode" aria-controls="codeOutput">
+      📄 Generated Arduino C++ (.ino)
+    </button>
+    <button class="tab" data-target="wiringOutput" role="tab" aria-selected="false" id="tabWiring" aria-controls="wiringOutput">
+      🔗 Netlist &amp; Wiring Map <span id="wireCountBadge" class="tab-badge">0</span>
+    </button>
+    <span class="tab-spacer"></span>
+    <button id="copyCodeBtn" class="btn btn-small" title="Copy Arduino code to clipboard">📋 Copy Code</button>
+    <button id="downloadBtn" class="btn btn-accent btn-small" title="Download ready-to-flash .ino sketch">⬇️ Download .ino</button>
+  </div>
+  <div class="tab-body">
+    <pre id="consoleOutput" class="tab-pane active" role="tabpanel" aria-labelledby="tabConsole" aria-live="polite"></pre>
+    <pre id="codeOutput" class="tab-pane" role="tabpanel" aria-labelledby="tabCode"></pre>
+    <pre id="wiringOutput" class="tab-pane" role="tabpanel" aria-labelledby="tabWiring"></pre>
+  </div>
+</section>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
